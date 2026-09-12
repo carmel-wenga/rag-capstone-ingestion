@@ -1,6 +1,6 @@
 # rag-capstone-ingestion
 
-Minimal ingestion service for a RAG pipeline. It reads local documents, chunks their text with LangChain, generates embeddings with LangChain, and stores them in Elasticsearch using a single ingestion flow.
+Minimal ingestion service for a RAG pipeline. It reads local documents, extracts text, chunks with LangChain, generates embeddings with LangChain, and stores chunks in Elasticsearch.
 
 ## Project structure
 
@@ -22,57 +22,124 @@ rag-capstone-ingestion/
   README.md
 ```
 
+## Requirements
+
+- Docker
+- `uv`
+- OpenAI API key for embeddings
+
 ## Environment variables
 
-Copy `.env.example` to `.env` and fill in the values:
+Create a `.env` file from `.env.example`:
 
 ```env
-VECTOR_DB_HOST=elasticsearch
-VECTOR_DB_PORT=9200
+VECTOR_DB_URL=http://elastic:9200
 VECTOR_DB_COLLECTION=rag-documents
-VECTOR_DB_SCHEME=http
-VECTOR_DB_USERNAME=
-VECTOR_DB_PASSWORD=
+VECTOR_DB_USERNAME=elastic
+VECTOR_DB_PASSWORD=changeit
 VECTOR_DB_VERIFY_CERTS=false
 EMBEDDING_MODEL=text-embedding-3-small
+EMBEDDING_DIMS=1536
 OPENAI_API_KEY=your-openai-api-key
 CHUNK_SIZE=1200
 CHUNK_OVERLAP=200
 ```
 
-`VECTOR_DB_HOST` should be the Elasticsearch container name when both containers are attached to the same Docker network.
-`EMBEDDING_MODEL` is passed to LangChain's `OpenAIEmbeddings` client.
-Chunking uses LangChain's `RecursiveCharacterTextSplitter`.
+`VECTOR_DB_URL` should point to Elasticsearch on the shared Docker network.
 
-## Supported inputs
+## Elasticsearch setup
+
+### 1. Create a Docker network
+
+```bash
+docker network create rag-network
+```
+
+### 2. Start Elasticsearch
+
+```bash
+docker run -d \
+  --name elastic \
+  --network rag-network \
+  -p 9200:9200 \
+  -e discovery.type=single-node \
+  -e xpack.security.enabled=true \
+  -e ELASTIC_PASSWORD=changeit \
+  -e xpack.security.http.ssl.enabled=false \
+  docker.elastic.co/elasticsearch/elasticsearch:9.5.2
+```
+
+This starts Elasticsearch with the built-in `elastic` user and the password `changeit`.
+
+### 3. Create the index
+
+Set the same collection name in `.env` and create the index before ingesting:
+
+```bash
+curl -u elastic:changeit \
+  -X PUT "http://localhost:9200/rag-documents" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "mappings": {
+      "properties": {
+        "metadata": {
+          "properties": {
+            "chunk_id": {"type": "keyword"},
+            "document_id": {"type": "keyword"},
+            "title": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
+            "source": {"type": "keyword"},
+            "page_number": {"type": "integer"},
+            "section": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
+            "chunk_index": {"type": "integer"}
+          }
+        },
+        "context": {
+          "properties": {
+            "text": {"type": "text"}
+          }
+        },
+        "embedding": {
+          "type": "dense_vector",
+          "dims": 1536,
+          "index": true,
+          "similarity": "cosine"
+        }
+      }
+    }
+  }'
+```
+
+## Ingestion workflow
+
+The workflow is:
+
+`file -> extract text -> LangChain chunking -> embeddings -> Elasticsearch upsert`
+
+Supported inputs:
 
 - `.pdf`
-- `.docx`
 - `.txt`
 - `.md`
 
-## Run locally
+`document_id` is derived from a stable hash in the ingestion code, and `chunk_id` is derived from `document_id + page + chunk index`.
 
-Create the uv-managed environment:
+## Run the ingestion workflow
+
+### Local run
 
 ```bash
 uv python install 3.11
 uv sync
-```
-
-Ingest every supported file under `data/`:
-
-```bash
 uv run --python 3.11 python main.py ingest --source ./data
 ```
 
-Ingest a single file:
+Single file:
 
 ```bash
 uv run --python 3.11 python main.py ingest --source ./data/policies.pdf
 ```
 
-## Docker usage
+### Docker run
 
 Build the image:
 
@@ -80,49 +147,19 @@ Build the image:
 docker build -t rag-capstone-ingestion .
 ```
 
-Run it on the same Docker network as Elasticsearch:
+Run ingestion on the same Docker network:
 
 ```bash
 docker run --rm \
-  --network shared_network \
+  --network rag-network \
   --env-file .env \
   -v "$(pwd)/data:/app/data" \
   rag-capstone-ingestion \
   uv run --python 3.11 python main.py ingest --source ./data
 ```
 
-`uv sync` creates the local `.venv` and installs locked dependencies for this project. The repository pins uv to Python 3.11 via `.python-version`.
+## Notes
 
-## Elasticsearch document shape
-
-Each indexed document follows this structure:
-
-```json
-{
-  "metadata": {
-    "chunk_id": "pto_policy_2026_p03_c02",
-    "document_id": "pto_policy_2026",
-    "title": "Paid Time Off Policy",
-    "category": "leave",
-    "country": "FR",
-    "version": "2026.1",
-    "effective_date": "2026-01-01",
-    "source": "employee_handbook.pdf",
-    "page_number": 3,
-    "section": "Annual Leave Entitlement",
-    "chunk_index": 12
-  },
-  "context": {
-    "text": "Employees are entitled to 25 days of paid annual leave per year..."
-  },
-  "embedding": [0.0123, -0.0456, 0.0789]
-}
-```
-
-## Current v1 scope
-
-- One ingestion command
-- One backend: Elasticsearch
-- Manual execution only
-- No manifest or idempotency layer yet
-- Tests can be added once the flow stabilizes
+- `uv sync` creates the local `.venv`
+- The project uses LangChain for both chunking and embeddings
+- The current Elasticsearch client expects the index to exist before ingestion

@@ -9,12 +9,6 @@ from app.schema import VectorDocument
 def get_elasticsearch_client() -> Elasticsearch:
     return Elasticsearch(
         settings.vector_db_url,
-        basic_auth=(
-            settings.vector_db_username,
-            settings.vector_db_password,
-        )
-        if settings.vector_db_username and settings.vector_db_password
-        else None,
         verify_certs=settings.vector_db_verify_certs,
     )
 

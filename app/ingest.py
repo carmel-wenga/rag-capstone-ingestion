@@ -12,6 +12,8 @@ from app.vectordb import create_index, get_elasticsearch_client, upsert_document
 
 from slugify import slugify
 
+import hashlib
+
 SUPPORTED_EXTENSIONS = {".pdf", ".txt", ".md"}
 
 
@@ -36,9 +38,8 @@ def run_ingestion(source_dir: str) -> None:
     # 2. Process each file: Extract sections, chunk text, generate embeddings, and prepare documents for ingestion.
     documents: list[VectorDocument] = []
     for file_path in file_paths:
-
         # 2.1. Extract document content or sections
-        document_id = slugify(file_path.stem)     # file_path.stem is the base name of the file without the extension
+        document_id = f"{slugify(file_path.stem)}-{hashlib.sha256(file_path.read_bytes()).hexdigest()}"
         document_title = _generate_title(file_path.stem)
         raw_sections = _extract_sections(file_path)
 
