@@ -34,6 +34,8 @@ def run_ingestion(source_dir: str) -> None:
         for path in sub_paths:
             if path.is_file() and path.suffix.lower() in SUPPORTED_EXTENSIONS:
                 file_paths.append(path)
+    else:
+        raise ValueError(f"Source path {source_dir} is not a directory or does not exist.")
 
     # 2. Process each file: Extract sections, chunk text, generate embeddings, and prepare documents for ingestion.
     documents: list[VectorDocument] = []
@@ -42,7 +44,9 @@ def run_ingestion(source_dir: str) -> None:
         document_id = f"{slugify(file_path.stem)}-{hashlib.sha256(file_path.read_bytes()).hexdigest()}"
         document_title = _generate_title(file_path.stem)
         raw_sections = _extract_sections(file_path)
+        print(f"Processing File: {file_path} - {len(raw_sections)} pages.")
 
+        nb_chunks = 0
         # 2.2. Chunk All Documents
         for page_number, section_name, text in raw_sections:
             chunks = chunk_text(
@@ -53,6 +57,7 @@ def run_ingestion(source_dir: str) -> None:
 
             # 2.3. Generate Embeddings for all chunks if "chunks" is not empty
             if chunks:
+                nb_chunks += len(chunks)
                 embeddings = embed_texts([chunk.text for chunk in chunks])
 
                 for chunk, embedding in zip(chunks, embeddings, strict=True):
@@ -72,6 +77,10 @@ def run_ingestion(source_dir: str) -> None:
                             embedding=embedding,
                         )
                     )
+        print(
+            f"Processed File: {file_path} - {len(raw_sections)} pages - "
+            f"Generated {nb_chunks} chunks and embeddings."
+        )
 
     # 3. Create or update Elasticsearch index: Ingest document into Elasticsearch.
     if documents:

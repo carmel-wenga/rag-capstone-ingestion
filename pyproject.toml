@@ -3,17 +3,17 @@ name = "rag-capstone-ingestion"
 version = "0.1.0"
 description = "Minimal ingestion service for chunking, embedding, and indexing documents in Elasticsearch."
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.13"
 dependencies = [
-    "click==8.1.7",
-    "elasticsearch==8.15.1",
-    "langchain-openai==0.2.2",
-    "langchain-text-splitters==0.3.8",
-    "pydantic==2.9.2",
-    "pydantic-settings==2.5.2",
-    "pypdf==5.0.1",
-    "python-docx==1.1.2",
-    "slugify>=0.0.1",
+    "click>=8.5.0",
+    "elasticsearch==9.5.1",
+    "langchain-openai>=1.6.2",
+    "langchain-text-splitters>=1.1.2",
+    "pydantic>=2.13.5",
+    "pydantic-settings>=2.15.0",
+    "pypdf>=6.18.1",
+    "python-docx>=1.2.0",
+    "python-slugify>=9.0.0",
 ]
 
 [project.scripts]

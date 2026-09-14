@@ -7,10 +7,7 @@ from app.schema import VectorDocument
 
 
 def get_elasticsearch_client() -> Elasticsearch:
-    return Elasticsearch(
-        settings.vector_db_url,
-        verify_certs=settings.vector_db_verify_certs,
-    )
+    return Elasticsearch(settings.vector_db_url)
 
 
 def create_index(client: Elasticsearch) -> None:

@@ -35,14 +35,12 @@ Create a `.env` file from `.env.example`:
 ```env
 VECTOR_DB_URL=http://elastic:9200
 VECTOR_DB_COLLECTION=rag-documents
-VECTOR_DB_USERNAME=elastic
-VECTOR_DB_PASSWORD=changeit
 VECTOR_DB_VERIFY_CERTS=false
 EMBEDDING_MODEL=text-embedding-3-small
 EMBEDDING_DIMS=1536
 OPENAI_API_KEY=your-openai-api-key
-CHUNK_SIZE=1200
-CHUNK_OVERLAP=200
+CHUNK_SIZE=500
+CHUNK_OVERLAP=50
 ```
 
 `VECTOR_DB_URL` should point to Elasticsearch on the shared Docker network.
@@ -59,54 +57,13 @@ docker network create rag-network
 
 ```bash
 docker run -d \
-  --name elastic \
+  --name rag-vector-db \
   --network rag-network \
   -p 9200:9200 \
   -e discovery.type=single-node \
-  -e xpack.security.enabled=true \
-  -e ELASTIC_PASSWORD=changeit \
+  -e xpack.security.enabled=false \
   -e xpack.security.http.ssl.enabled=false \
   docker.elastic.co/elasticsearch/elasticsearch:9.5.2
-```
-
-This starts Elasticsearch with the built-in `elastic` user and the password `changeit`.
-
-### 3. Create the index
-
-Set the same collection name in `.env` and create the index before ingesting:
-
-```bash
-curl -u elastic:changeit \
-  -X PUT "http://localhost:9200/rag-documents" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "mappings": {
-      "properties": {
-        "metadata": {
-          "properties": {
-            "chunk_id": {"type": "keyword"},
-            "document_id": {"type": "keyword"},
-            "title": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
-            "source": {"type": "keyword"},
-            "page_number": {"type": "integer"},
-            "section": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
-            "chunk_index": {"type": "integer"}
-          }
-        },
-        "context": {
-          "properties": {
-            "text": {"type": "text"}
-          }
-        },
-        "embedding": {
-          "type": "dense_vector",
-          "dims": 1536,
-          "index": true,
-          "similarity": "cosine"
-        }
-      }
-    }
-  }'
 ```
 
 ## Ingestion workflow
@@ -128,15 +85,15 @@ Supported inputs:
 ### Local run
 
 ```bash
-uv python install 3.11
+uv python install 3.13
 uv sync
-uv run --python 3.11 python main.py ingest --source ./data
+uv run --python 3.13 python main.py ingest --source ./data
 ```
 
 Single file:
 
 ```bash
-uv run --python 3.11 python main.py ingest --source ./data/policies.pdf
+uv run --python 3.13 python main.py ingest --source ./data/policies.pdf
 ```
 
 ### Docker run
@@ -155,7 +112,7 @@ docker run --rm \
   --env-file .env \
   -v "$(pwd)/data:/app/data" \
   rag-capstone-ingestion \
-  uv run --python 3.11 python main.py ingest --source ./data
+  uv run --python 3.13 python main.py ingest --source ./data
 ```
 
 ## Notes
